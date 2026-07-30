@@ -1,0 +1,37 @@
+# --- Web Framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+python-multipart==0.0.19
+
+# --- LangChain / AI Orchestration ---
+langchain==0.3.13
+langchain-community==0.3.13
+langchain-core==0.3.28
+
+# --- Embeddings & Vector Search ---
+sentence-transformers==3.3.1
+faiss-cpu>=1.9.0
+
+# --- LLM (Phi-3 Mini) ---
+transformers==4.47.1
+torch==2.5.1
+accelerate==1.2.1
+
+# --- Database ---
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+alembic==1.14.0
+
+# --- Data Handling (for Phase 4 dataset work) ---
+pandas==2.2.3
+numpy==1.26.4
+
+# --- Testing ---
+pytest==8.3.4
+httpx==0.28.1
+
+# --- Logging/Utilities ---
+loguru==0.7.3
