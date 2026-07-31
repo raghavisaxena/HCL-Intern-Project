@@ -1,0 +1,3 @@
+2026-08-01 01:11:35 | INFO     | app.core.logging_config:configure_logging:55 - Logging configured | env=development | level=DEBUG
+2026-08-01 01:11:35 | INFO     | app.main:on_startup:38 - 🚀 IT Incident Ticket Assistant starting up in 'development' mode
+2026-08-01 01:16:55 | INFO     | app.main:on_shutdown:43 - 👋 Application shutting down
