@@ -1,224 +1,143 @@
 from loguru import logger
 
-from agents.retrieval_agent import RetrievalAgent
-
 
 class ResolutionAgent:
     """
-    Generates/returns a resolution for a new IT incident.
+    Generates a resolution using historically similar tickets.
 
-    Default behavior:
-        Uses RAG to retrieve historically similar tickets and
-        immediately returns the best historical resolution.
+    Default mode:
+        RAG -> return the best historical resolution.
 
-    Optional behavior:
-        Phi-3 Mini can be enabled to generate/refine a resolution
-        using the retrieved historical tickets as context.
+    Optional mode:
+        Phi-3 can be added later for generative resolution.
     """
 
-    def __init__(self, top_k: int = 3, use_llm: bool = False):
+    def __init__(self, top_k=3, llm=None):
 
         logger.info("Initializing Resolution Agent...")
 
         self.top_k = top_k
-        self.use_llm = use_llm
-
-        # RAG retrieval component
-        self.retrieval_agent = RetrievalAgent(top_k=top_k)
-
-        # Load Phi-3 ONLY if explicitly requested
-        self.llm = None
-
-        if self.use_llm:
-            logger.info("Loading Phi-3 Mini...")
-
-            from llm.phi_model import Phi3Model
-
-            self.llm = Phi3Model()
+        self.llm = llm
 
         logger.info("Resolution Agent initialized successfully.")
 
-    def generate_resolution(self, ticket_text: str):
+    def generate_resolution(
+        self,
+        ticket_text: str,
+        similar_tickets=None,
+        use_llm=False
+    ):
 
         if not ticket_text or not ticket_text.strip():
             raise ValueError("Ticket text cannot be empty.")
 
-        # --------------------------------------------------
-        # STEP 1: RETRIEVE SIMILAR HISTORICAL TICKETS
-        # --------------------------------------------------
-
-        logger.info("Retrieving similar tickets...")
-
-        similar_tickets = self.retrieval_agent.retrieve_for_resolution(
-            ticket_text
-        )
-
         if not similar_tickets:
-
-            logger.warning("No similar historical tickets found.")
-
             return {
                 "resolution": (
                     "No similar historical tickets were found. "
                     "Manual investigation is recommended."
                 ),
-                "similar_tickets": [],
-                "source": "fallback"
+                "similar_tickets": []
             }
 
         logger.info(
-            f"Retrieved {len(similar_tickets)} similar tickets."
+            f"Using {len(similar_tickets)} retrieved tickets "
+            f"for resolution."
         )
 
         # --------------------------------------------------
-        # STEP 2: BEST HISTORICAL RESOLUTION
+        # RAG MODE
         # --------------------------------------------------
 
-        best_ticket = similar_tickets[0]
+        if not use_llm:
 
-        best_resolution = best_ticket.get("resolution", "")
-
-        # If the best ticket does not have a resolution,
-        # search the remaining retrieved tickets.
-        if not best_resolution or not best_resolution.strip():
-
-            for ticket in similar_tickets[1:]:
-
-                resolution = ticket.get("resolution", "")
-
-                if resolution and resolution.strip():
-                    best_ticket = ticket
-                    best_resolution = resolution
-                    break
-
-        # --------------------------------------------------
-        # STEP 3: RAG-ONLY MODE
-        # --------------------------------------------------
-
-        if not self.use_llm:
-
-            logger.info(
-                "Returning best historical resolution directly "
-                "(RAG mode)."
+            best_ticket = max(
+                similar_tickets,
+                key=lambda x: float(
+                    x.get("similarity_score", 0)
+                )
             )
 
-            if best_resolution and best_resolution.strip():
+            resolution = best_ticket.get("resolution")
 
-                return {
-                    "resolution": best_resolution.strip(),
-                    "similar_tickets": similar_tickets,
-                    "source": "RAG"
-                }
+            if not resolution:
+                resolution = (
+                    "A similar historical incident was found, "
+                    "but no previous resolution was recorded."
+                )
+
+            logger.info(
+                "Returning best historical resolution directly (RAG mode)."
+            )
 
             return {
-                "resolution": (
-                    "Similar historical incidents were found, "
-                    "but no previous resolution is available. "
-                    "Manual investigation is recommended."
-                ),
+                "resolution": resolution,
+                "source_ticket": best_ticket.get("ticket_id"),
                 "similar_tickets": similar_tickets,
-                "source": "RAG"
+                "mode": "RAG"
             }
 
         # --------------------------------------------------
-        # STEP 4: OPTIONAL PHI-3 GENERATION
+        # OPTIONAL PHI-3 MODE
         # --------------------------------------------------
 
-        logger.info(
-            "Generating refined resolution using Phi-3 Mini..."
-        )
+        if self.llm is None:
+            raise RuntimeError(
+                "Phi-3 is not loaded. "
+                "Initialize ResolutionAgent with llm=Phi3Model() "
+                "to use LLM generation."
+            )
 
-        context_parts = []
+        context = []
 
         for ticket in similar_tickets:
 
-            resolution = ticket.get("resolution", "")
-
-            if resolution:
-                resolution = resolution[:500]
-
-            context_parts.append(
+            context.append(
                 f"""
-Ticket ID: {ticket['ticket_id']}
-Subject: {ticket['subject']}
-Category: {ticket['category']}
-Subcategory: {ticket['subcategory']}
-Priority: {ticket['priority']}
-Similarity: {ticket['similarity_score']:.3f}
+Ticket ID: {ticket.get('ticket_id')}
+Subject: {ticket.get('subject')}
+Category: {ticket.get('category')}
+Subcategory: {ticket.get('subcategory')}
 
 Previous Resolution:
-{resolution}
+{ticket.get('resolution')}
 """
             )
 
-        historical_context = "\n".join(context_parts)
+        historical_context = "\n".join(context)
 
         prompt = f"""
-You are an IT support assistant.
+You are an IT support resolution assistant.
 
 NEW INCIDENT:
 {ticket_text}
 
-HISTORICAL SIMILAR INCIDENTS:
+HISTORICAL INCIDENTS:
 {historical_context}
 
-Based ONLY on the new incident and historical resolutions,
-provide a concise practical troubleshooting resolution.
+Based ONLY on the historical examples, provide
+clear and practical troubleshooting steps.
 
-Do not mention AI.
 Do not invent company-specific information.
-Do not repeat the ticket unnecessarily.
 
-Return only the recommended resolution.
+Return:
+
+Resolution:
+<steps>
+
+Why:
+<short explanation>
 """
 
-        try:
+        logger.info("Generating resolution with Phi-3 Mini...")
 
-            response = self.llm.generate(
-                prompt,
-                max_new_tokens=40
-            )
-
-            if response and response.strip():
-
-                logger.info(
-                    "Phi-3 generated a resolution successfully."
-                )
-
-                return {
-                    "resolution": response.strip(),
-                    "similar_tickets": similar_tickets,
-                    "source": "Phi-3 + RAG"
-                }
-
-        except Exception as e:
-
-            logger.error(
-                f"Phi-3 generation failed: {e}"
-            )
-
-        # --------------------------------------------------
-        # STEP 5: FALLBACK TO RAG
-        # --------------------------------------------------
-
-        logger.warning(
-            "Phi-3 unavailable/failed. "
-            "Returning best historical resolution."
+        response = self.llm.generate(
+            prompt,
+            max_new_tokens=120
         )
 
-        if best_resolution and best_resolution.strip():
-
-            return {
-                "resolution": best_resolution.strip(),
-                "similar_tickets": similar_tickets,
-                "source": "RAG fallback"
-            }
-
         return {
-            "resolution": (
-                "No usable historical resolution was found. "
-                "Manual investigation is recommended."
-            ),
+            "resolution": response,
             "similar_tickets": similar_tickets,
-            "source": "fallback"
+            "mode": "Phi-3"
         }

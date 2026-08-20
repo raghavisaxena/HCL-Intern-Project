@@ -1,144 +1,74 @@
-import json
-import re
+from collections import Counter
 from loguru import logger
-
-from llm.phi_model import Phi3Model
-
-
-CATEGORIES = [
-    "Technical Support",
-    "Product Support",
-    "Customer Service",
-    "IT Support",
-    "Billing and Payments",
-    "Returns and Exchanges",
-    "Service Outages and Maintenance",
-    "Sales and Pre-Sales",
-    "Human Resources",
-    "General Inquiry",
-]
-
-SUBCATEGORIES = [
-    "Technical",
-    "Security",
-    "Bug",
-    "Feedback",
-    "Feature",
-    "Billing",
-    "Performance",
-    "Customer",
-    "Crash",
-    "Outage",
-    "Network",
-    "Product",
-    "Login",
-    "Documentation",
-    "Sales",
-]
 
 
 class ClassificationAgent:
+    """
+    Classifies an IT ticket using historically similar tickets.
 
-    def __init__(self):
-        logger.info("Initializing Classification Agent")
-        self.llm = Phi3Model()
-        logger.info("Classification Agent ready")
+    Uses category/subcategory majority voting from RAG results.
+    Phi-3 is not required for the default demo pipeline.
+    """
 
-    def classify(self, subject: str, description: str) -> dict:
+    def __init__(self, llm=None):
+        self.llm = llm
+        logger.info("Classification Agent ready (RAG mode)")
 
-        prompt = f"""
-You are an IT support ticket classification agent.
+    def classify(self, subject: str, description: str, retrieved_tickets=None):
 
-Classify the following IT support ticket.
+        if not subject and not description:
+            raise ValueError("Subject and description cannot both be empty.")
 
-SUBJECT:
-{subject}
+        if not retrieved_tickets:
+            return {
+                "category": "General Inquiry",
+                "subcategory": "Technical",
+                "confidence": 0.0,
+                "reason": "No similar historical tickets were found."
+            }
 
-DESCRIPTION:
-{description}
+        categories = [
+            ticket.get("category")
+            for ticket in retrieved_tickets
+            if ticket.get("category")
+        ]
 
-Choose EXACTLY ONE category from this list:
+        subcategories = [
+            ticket.get("subcategory")
+            for ticket in retrieved_tickets
+            if ticket.get("subcategory")
+        ]
 
-{", ".join(CATEGORIES)}
+        if categories:
+            category_counts = Counter(categories)
+            category, category_count = category_counts.most_common(1)[0]
+            category_confidence = category_count / len(categories)
+        else:
+            category = "General Inquiry"
+            category_confidence = 0.0
 
-Choose EXACTLY ONE subcategory from this list:
+        if subcategories:
+            subcategory_counts = Counter(subcategories)
+            subcategory, _ = subcategory_counts.most_common(1)[0]
+        else:
+            subcategory = "Technical"
 
-{", ".join(SUBCATEGORIES)}
+        confidence = round(category_confidence, 2)
 
-Return ONLY valid JSON in exactly this format:
-
-{{
-  "category": "one category from the list",
-  "subcategory": "one subcategory from the list",
-  "confidence": 0.0
-}}
-
-Rules:
-- Do not invent category names.
-- Do not invent subcategory names.
-- Category must exactly match one of the provided categories.
-- Subcategory must exactly match one of the provided subcategories.
-- Confidence must be a number between 0 and 1.
-- Do not include explanations.
-- Do not include markdown.
-"""
-
-        response = self.llm.generate(
-            prompt,
-            max_new_tokens=100
-        )
-
-        result = self._parse_response(response)
-
-        logger.info(
-            f"Classification result: "
-            f"{result['category']} / {result['subcategory']} "
-            f"(confidence={result['confidence']})"
-        )
-
-        return result
-
-    def _parse_response(self, response: str) -> dict:
-
-        match = re.search(r"\{.*\}", response, re.DOTALL)
-
-        if not match:
-            raise ValueError(
-                f"Could not find JSON in model response:\n{response}"
-            )
-
-        try:
-            result = json.loads(match.group())
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Invalid JSON returned by model:\n{response}"
-            ) from exc
-
-        category = result.get("category")
-        subcategory = result.get("subcategory")
-        confidence = result.get("confidence")
-
-        if category not in CATEGORIES:
-            raise ValueError(
-                f"Invalid category returned by model: {category}"
-            )
-
-        if subcategory not in SUBCATEGORIES:
-            raise ValueError(
-                f"Invalid subcategory returned by model: {subcategory}"
-            )
-
-        try:
-            confidence = float(confidence)
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Invalid confidence returned by model: {confidence}"
-            )
-
-        confidence = max(0.0, min(1.0, confidence))
-
-        return {
+        result = {
             "category": category,
             "subcategory": subcategory,
             "confidence": confidence,
+            "reason": (
+                f"Classification is based on {len(retrieved_tickets)} "
+                f"historically similar tickets."
+            )
         }
+
+        logger.info(
+            f"Classification result: "
+            f"{category} / {subcategory} "
+            f"(confidence={confidence})"
+        )
+
+        return result

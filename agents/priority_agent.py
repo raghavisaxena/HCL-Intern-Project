@@ -1,131 +1,121 @@
-import json
-import re
 from loguru import logger
-
-from llm.phi_model import Phi3Model
-
-
-PRIORITIES = [
-    "low",
-    "medium",
-    "high",
-]
 
 
 class PriorityAgent:
+    """
+    Determines incident priority using simple business rules
+    and information from historically similar tickets.
 
-    def __init__(self):
-        logger.info("Initializing Priority Agent")
-        self.llm = Phi3Model()
-        logger.info("Priority Agent ready")
+    Phi-3 is optional and not required for the default demo.
+    """
 
-    def determine_priority(self, subject: str, description: str) -> dict:
+    def __init__(self, llm=None):
+        self.llm = llm
+        logger.info("Priority Agent ready (rule-based mode)")
 
-        prompt = f"""
-You are an IT support priority assessment agent.
+    def determine_priority(
+        self,
+        subject: str,
+        description: str,
+        retrieved_tickets=None
+    ):
 
-Determine the priority of the following IT support ticket.
+        text = f"{subject} {description}".lower()
 
-SUBJECT:
-{subject}
+        # High-priority indicators
+        high_keywords = [
+            "critical",
+            "system down",
+            "server down",
+            "complete outage",
+            "cannot access",
+            "security breach",
+            "data loss",
+            "production down",
+            "major outage"
+        ]
 
-DESCRIPTION:
-{description}
+        # Medium-priority indicators
+        medium_keywords = [
+            "crash",
+            "error",
+            "failed",
+            "not working",
+            "unable",
+            "problem",
+            "issue",
+            "slow",
+            "performance"
+        ]
 
-Choose EXACTLY ONE priority from:
+        if any(keyword in text for keyword in high_keywords):
 
-low
-medium
-high
+            priority = "high"
+            confidence = 0.90
+            reason = "The incident contains indicators of significant system or business impact."
 
-Use these guidelines:
+        elif any(keyword in text for keyword in medium_keywords):
 
-HIGH:
-- Critical application or system failure
-- User cannot perform an important required operation
-- Major outage or severe security-related issue
-- Issue has significant business impact
+            priority = "medium"
+            confidence = 0.80
+            reason = "The incident affects functionality but does not indicate a major outage."
 
-MEDIUM:
-- Important functionality is affected
-- User can continue working with limitations
-- Issue requires support but is not critical
+        else:
 
-LOW:
-- General questions
-- Minor inconvenience
-- Informational requests
-- Non-urgent feedback or documentation requests
+            priority = "low"
+            confidence = 0.75
+            reason = "The incident appears to be a minor or non-critical request."
 
-Return ONLY valid JSON in exactly this format:
+        # Use historical tickets as an additional signal
+        if retrieved_tickets:
 
-{{
-  "priority": "low",
-  "confidence": 0.0,
-  "reason": "short explanation"
-}}
+            historical_priorities = []
 
-Rules:
-- Priority must be exactly low, medium, or high.
-- Confidence must be a number between 0 and 1.
-- Reason must be one short sentence.
-- Do not include markdown.
-- Do not include any additional fields.
-"""
+            for ticket in retrieved_tickets:
+                p = ticket.get("priority")
 
-        response = self.llm.generate(
-            prompt,
-            max_new_tokens=100
-        )
+                if p:
+                    historical_priorities.append(str(p).lower())
 
-        result = self._parse_response(response)
+            if historical_priorities:
+
+                high_count = historical_priorities.count("high")
+                medium_count = historical_priorities.count("medium")
+                low_count = historical_priorities.count("low")
+
+                if high_count > len(historical_priorities) / 2:
+                    priority = "high"
+                    confidence = max(confidence, 0.85)
+                    reason = (
+                        "The majority of historically similar incidents "
+                        "were classified as high priority."
+                    )
+
+                elif medium_count > len(historical_priorities) / 2:
+                    priority = "medium"
+                    confidence = max(confidence, 0.80)
+                    reason = (
+                        "The majority of historically similar incidents "
+                        "were classified as medium priority."
+                    )
+
+                elif low_count > len(historical_priorities) / 2:
+                    priority = "low"
+                    confidence = max(confidence, 0.75)
+                    reason = (
+                        "The majority of historically similar incidents "
+                        "were classified as low priority."
+                    )
+
+        result = {
+            "priority": priority,
+            "confidence": round(confidence, 2),
+            "reason": reason
+        }
 
         logger.info(
-            f"Priority result: {result['priority']} "
-            f"(confidence={result['confidence']})"
+            f"Priority result: {priority} "
+            f"(confidence={confidence})"
         )
 
         return result
-
-    def _parse_response(self, response: str) -> dict:
-
-        match = re.search(r"\{.*\}", response, re.DOTALL)
-
-        if not match:
-            raise ValueError(
-                f"Could not find JSON in model response:\n{response}"
-            )
-
-        try:
-            result = json.loads(match.group())
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Invalid JSON returned by model:\n{response}"
-            ) from exc
-
-        priority = result.get("priority")
-        confidence = result.get("confidence")
-        reason = result.get("reason")
-
-        if priority not in PRIORITIES:
-            raise ValueError(
-                f"Invalid priority returned by model: {priority}"
-            )
-
-        try:
-            confidence = float(confidence)
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Invalid confidence returned by model: {confidence}"
-            )
-
-        confidence = max(0.0, min(1.0, confidence))
-
-        if not isinstance(reason, str) or not reason.strip():
-            raise ValueError("Invalid or missing priority reason")
-
-        return {
-            "priority": priority,
-            "confidence": confidence,
-            "reason": reason.strip(),
-        }
