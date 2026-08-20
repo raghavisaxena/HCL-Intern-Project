@@ -8,9 +8,12 @@ from llm.config import MODEL_NAME
 class Phi3Model:
 
     def __init__(self):
+
         logger.info(f"Loading model: {MODEL_NAME}")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            MODEL_NAME
+        )
 
         self.model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME,
@@ -22,7 +25,11 @@ class Phi3Model:
 
         logger.info("Phi-3 Mini loaded successfully.")
 
-    def generate(self, prompt: str, max_new_tokens: int = 200):
+    def generate(
+        self,
+        prompt: str,
+        max_new_tokens: int = 40
+    ):
 
         messages = [
             {
@@ -43,14 +50,20 @@ class Phi3Model:
         )
 
         with torch.no_grad():
+
             outputs = self.model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
-                temperature=0.2,
-                do_sample=True
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+                use_cache=True
             )
 
-        generated_tokens = outputs[0][inputs["input_ids"].shape[1]:]
+        generated_tokens = outputs[
+            0
+        ][
+            inputs["input_ids"].shape[1]:
+        ]
 
         response = self.tokenizer.decode(
             generated_tokens,
