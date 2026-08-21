@@ -64,6 +64,8 @@ The system takes a new IT incident as input and:
        │ Assignment     │
        │ Resolution     │
        └────────────────┘
+```
+---
 
 ## 👥 **Project Architecture**
 
@@ -76,12 +78,49 @@ This makes the system:
 - Extensible
 - Easier to test
 - Easier to integrate with APIs and user interfaces
+---
+## ⚙️ Current Workflow
+
+The current end-to-end workflow is:
+```
+1. User provides incident
+          ↓
+2. Supervisor receives incident
+          ↓
+3. Retrieval Agent finds similar tickets
+          ↓
+4. Classification Agent determines category
+          ↓
+5. Priority Agent determines urgency
+          ↓
+6. Assignment Agent recommends support category
+          ↓
+7. Resolution Agent retrieves relevant historical resolution
+          ↓
+8. Supervisor combines all results
+          ↓
+9. Final incident analysis is returned
+```
+---
+## 🛠️ Technology Stack
+| Component            | Technology                       |
+| -------------------- | -------------------------------- |
+| Programming Language | Python                           |
+| LLM                  | Microsoft Phi-3 Mini 4K Instruct |
+| Embedding Model      | BAAI/bge-small-en-v1.5           |
+| Vector Database      | FAISS                            |
+| RAG                  | Retrieval-Augmented Generation   |
+| API                  | FastAPI                          |
+| Agent Architecture   | Multi-Agent Architecture         |
+| Logging              | Loguru                           |
+| Version Control      | Git / GitHub                     |
+---
 
 ## 📜 License
 
 This project is developed as part of an internship project.
 
-%% 👩‍💻 Author
+## 👩‍💻 Author
 
 Raghavi Saxena  
 Akanksha  
