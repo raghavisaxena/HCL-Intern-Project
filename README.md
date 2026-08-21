@@ -64,3 +64,25 @@ The system takes a new IT incident as input and:
        │ Assignment     │
        │ Resolution     │
        └────────────────┘
+
+## 👥 **Project Architecture**
+
+The project follows a modular multi-agent architecture where each agent has a specific responsibility.
+
+This makes the system:
+
+- Modular
+- Maintainable
+- Extensible
+- Easier to test
+- Easier to integrate with APIs and user interfaces
+
+## 📜 License
+
+This project is developed as part of an internship project.
+
+%% 👩‍💻 Author
+
+Raghavi Saxena  
+Akanksha  
+B.Tech Computer Science & Engineering
