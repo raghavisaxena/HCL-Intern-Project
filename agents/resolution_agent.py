@@ -133,7 +133,7 @@ Why:
 
         response = self.llm.generate(
             prompt,
-            max_new_tokens=300
+            max_new_tokens=600
         )
 
         return {

@@ -231,6 +231,15 @@ function priorityBadgeClass(priority) {
   return priority.toLowerCase();
 }
 
+function formatResolution(text) {
+  if (!text) return '-';
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
 function renderResults(data) {
   const cls = data.classification || {};
   const pri = data.priority || {};
@@ -254,7 +263,7 @@ function renderResults(data) {
   document.getElementById('asg-reason').textContent = asg.reason || '-';
 
   document.getElementById('res-mode').textContent = res.mode ? `(Mode: ${res.mode})` : '';
-  document.getElementById('res-text').textContent = res.resolution || '-';
+  document.getElementById('res-text').innerHTML = formatResolution(res.resolution);
 
   const listEl = document.getElementById('similar-list');
   listEl.innerHTML = '';
