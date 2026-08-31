@@ -11,8 +11,7 @@ def main():
     subject = "Application crashes when I try to open it"
 
     description = (
-        "The application crashes immediately after I open it. "
-        "I restarted my computer but the problem still happens."
+        "The application crashes immediately after I open it. I restarted my computer but the problem still happens."
     )
 
     print("\nNEW INCIDENT")
@@ -27,7 +26,7 @@ def main():
     # IMPORTANT:
     # load_llm=False keeps the demo fast.
     supervisor = SupervisorAgent(
-        load_llm=False
+        load_llm=True
     )
 
     print("\nProcessing incident...")

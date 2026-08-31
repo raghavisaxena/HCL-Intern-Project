@@ -9,7 +9,7 @@ class ResolutionAgent:
         RAG -> return the best historical resolution.
 
     Optional mode:
-        Phi-3 can be added later for generative resolution.
+        Groq (openai/gpt-oss-120b) is used for generative resolution.
     """
 
     def __init__(self, top_k=3, llm=None):
@@ -78,13 +78,13 @@ class ResolutionAgent:
             }
 
         # --------------------------------------------------
-        # OPTIONAL PHI-3 MODE
+        # OPTIONAL GROQ MODE
         # --------------------------------------------------
 
         if self.llm is None:
             raise RuntimeError(
-                "Phi-3 is not loaded. "
-                "Initialize ResolutionAgent with llm=Phi3Model() "
+                "LLM is not loaded. "
+                "Initialize ResolutionAgent with llm=GroqModel() "
                 "to use LLM generation."
             )
 
@@ -129,15 +129,15 @@ Why:
 <short explanation>
 """
 
-        logger.info("Generating resolution with Phi-3 Mini...")
+        logger.info("Generating resolution with Groq...")
 
         response = self.llm.generate(
             prompt,
-            max_new_tokens=120
+            max_new_tokens=300
         )
 
         return {
             "resolution": response,
             "similar_tickets": similar_tickets,
-            "mode": "Phi-3"
+            "mode": "Groq"
         }
