@@ -1,6 +1,6 @@
 from loguru import logger
 
-from llm.phi_model import Phi3Model
+from llm.groq_model import GroqModel
 
 from agents.classification_agent import ClassificationAgent
 from agents.priority_agent import PriorityAgent
@@ -39,9 +39,9 @@ class SupervisorAgent:
 
         if load_llm:
 
-            logger.info("Loading optional Phi-3 Mini...")
+            logger.info("Loading Groq model...")
 
-            self.llm = Phi3Model()
+            self.llm = GroqModel()
 
         else:
 
@@ -201,7 +201,7 @@ Description:
             self.resolution_agent.generate_resolution(
                 ticket_text,
                 similar_tickets=similar_tickets,
-                use_llm=False
+                use_llm=self.llm is not None,
             )
         )
 

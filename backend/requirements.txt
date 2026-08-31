@@ -17,7 +17,7 @@ faiss-cpu>=1.9.0
 
 # --- LLM (Phi-3 Mini) ---
 transformers==4.47.1
-torch==2.5.1
+torch
 accelerate==1.2.1
 
 # --- Database ---
@@ -27,7 +27,7 @@ alembic==1.14.0
 
 # --- Data Handling (for Phase 4 dataset work) ---
 pandas==2.2.3
-numpy==1.26.4
+numpy
 
 # --- Testing ---
 pytest==8.3.4
