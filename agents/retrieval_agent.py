@@ -34,6 +34,11 @@ class RetrievalAgent:
 
         results = self.retrieve(ticket_text)
 
+        # Keep only genuinely relevant historical tickets
+        results = results[
+            results["similarity_score"] >= 0.65
+        ]
+
         retrieved_tickets = []
 
         for _, row in results.iterrows():

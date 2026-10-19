@@ -108,8 +108,36 @@
   }
 
   #loading { display: none; color: #666; margin-top: 14px; }
+  .step-row {
+    padding: 4px 0;
+    font-size: 14px;
+    color: #999;
+    transition: color 0.2s;
+  }
+  .step-row.done {
+    color: #1a1a1a;
+    font-weight: 600;
+  }
+  .step-icon {
+    display: inline-block;
+    width: 20px;
+  }
+  .step-time {
+    color: #2563eb;
+    font-weight: 400;
+    font-size: 13px;
+  }
 
   .section-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; color: #333; }
+  input[type="email"] {
+    width: 100%;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    font-size: 15px;
+    box-sizing: border-box;
+  }
 </style>
 </head>
 <body>
@@ -123,9 +151,21 @@
 
   <label for="description">Description</label>
   <textarea id="description" placeholder="Full description of the issue"></textarea>
+  
+  <label for="email">Email (for updates)</label>
+  <input type="email" id="email" placeholder="you@example.com">
 
-  <button id="submit-btn" onclick="analyzeTicket()">Analyze Ticket</button>
-  <div id="loading">Analyzing... this may take a few seconds.</div>
+    <button id="submit-btn" onclick="analyzeTicket()">Analyze Ticket</button>
+  <div id="loading">
+    <div>Analyzing... this may take a few seconds.</div>
+    <div id="step-tracker" style="margin-top:10px;">
+      <div class="step-row" data-step="retrieval"><span class="step-icon">⏳</span> Retrieval <span class="step-time"></span></div>
+      <div class="step-row" data-step="classification"><span class="step-icon">⏳</span> Classification <span class="step-time"></span></div>
+      <div class="step-row" data-step="priority"><span class="step-icon">⏳</span> Priority <span class="step-time"></span></div>
+      <div class="step-row" data-step="assignment"><span class="step-icon">⏳</span> Assignment <span class="step-time"></span></div>
+      <div class="step-row" data-step="resolution"><span class="step-icon">⏳</span> Resolution <span class="step-time"></span></div>
+    </div>
+  </div>
 </div>
 
 <div id="error-box"></div>
@@ -163,7 +203,18 @@
   </div>
 
   <div class="card">
+    <div class="section-title">Pipeline Timing</div>
+    <div id="timing-list" style="font-size:13px;color:#333;"></div>
+  </div>
+  
+  <div class="card" id="diag-card" style="display:none;">
+    <div class="section-title">Network Diagnostics (real checks)</div>
+    <div id="diag-list" style="font-size:13px;color:#333;"></div>
+  </div>
+
+  <div class="card">
     <div class="section-title">Resolution <span id="res-mode" style="font-weight:400;color:#888;"></span></div>
+    <div id="res-grounding" style="font-size:13px;color:#555;margin-bottom:8px;"></div>
     <div class="resolution-box" id="res-text">-</div>
   </div>
 
@@ -177,9 +228,36 @@
 <script>
 const API_URL = "http://127.0.0.1:8000/api/analyze-ticket";
 
+const STEP_ORDER = ['retrieval', 'classification', 'priority', 'assignment', 'resolution'];
+const STEP_LABELS = {
+  retrieval: 'Retrieval',
+  classification: 'Classification',
+  priority: 'Priority',
+  assignment: 'Assignment',
+  resolution: 'Resolution'
+};
+
+function initStepTracker() {
+  STEP_ORDER.forEach(step => {
+    const row = document.querySelector(`.step-row[data-step="${step}"]`);
+    if (!row) return;
+    row.classList.remove('done');
+    row.querySelector('.step-icon').textContent = '⏳';
+    row.querySelector('.step-time').textContent = '';
+  });
+}
+
+function markStepDone(step, time) {
+  const row = document.querySelector(`.step-row[data-step="${step}"]`);
+  if (!row) return;
+  row.classList.add('done');
+  row.querySelector('.step-icon').textContent = '✅';
+  row.querySelector('.step-time').textContent = `(${time}s)`;
+}
 async function analyzeTicket() {
   const subject = document.getElementById('subject').value.trim();
   const description = document.getElementById('description').value.trim();
+  const email = document.getElementById('email').value.trim();
   const errorBox = document.getElementById('error-box');
   const results = document.getElementById('results');
   const btn = document.getElementById('submit-btn');
@@ -196,12 +274,22 @@ async function analyzeTicket() {
 
   btn.disabled = true;
   loading.style.display = 'block';
+  initStepTracker();
+
+  const timingLabels = {
+    retrieval: 'Retrieval',
+    classification: 'Classification',
+    priority: 'Priority',
+    assignment: 'Assignment',
+    resolution: 'Resolution'
+  };
+  const completed = [];
 
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject, description })
+      body: JSON.stringify({ subject, description, email })
     });
 
     if (!response.ok) {
@@ -209,8 +297,47 @@ async function analyzeTicket() {
       throw new Error(errData.detail || `Request failed with status ${response.status}`);
     }
 
-    const data = await response.json();
-    renderResults(data);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResult = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+
+        if (!rawEvent.startsWith('data: ')) continue;
+        const jsonStr = rawEvent.slice(6);
+
+        let update;
+        try {
+          update = JSON.parse(jsonStr);
+        } catch (e) {
+          continue;
+        }
+
+        if (update.type === 'progress') {
+          markStepDone(update.agent, update.time);
+        } else if (update.type === 'final') {
+          finalResult = update.result;
+        } else if (update.type === 'error') {
+          throw new Error(update.detail || 'Ticket analysis failed');
+        }
+      }
+    }
+
+    if (!finalResult) {
+      throw new Error('Stream ended without a final result.');
+    }
+
+    renderResults(finalResult);
 
   } catch (err) {
     errorBox.textContent = "Error: " + err.message;
@@ -262,7 +389,42 @@ function renderResults(data) {
   document.getElementById('asg-confidence').textContent = pct(asg.confidence);
   document.getElementById('asg-reason').textContent = asg.reason || '-';
 
+  const timings = data.agent_timings || {};
+const timingLabels = {
+        retrieval: 'Retrieval',
+        classification: 'Classification',
+        priority: 'Priority',
+        assignment: 'Assignment',
+        resolution: 'Resolution'
+      };
+      const timingHtml = Object.keys(timingLabels)
+        .filter(key => timings[key] !== undefined)
+        .map(key => `${timingLabels[key]}: <strong>${timings[key]}s</strong>`)
+        .join(' &nbsp;→&nbsp; ');
+      document.getElementById('timing-list').innerHTML = timingHtml || 'No timing data available.';
+      const diagnostics = (data.diagnostics || []);
+const diagCard = document.getElementById('diag-card');
+if (diagnostics.length > 0) {
+  document.getElementById('diag-list').innerHTML = diagnostics
+    .map(line => `<div style="margin-bottom:4px;">${line.includes('OK') ? '✅' : '❌'} ${line}</div>`)
+    .join('');
+  diagCard.style.display = 'block';
+} else {
+  diagCard.style.display = 'none';
+}
   document.getElementById('res-mode').textContent = res.mode ? `(Mode: ${res.mode})` : '';
+
+if (similar.length > 0) {
+        const top = similar.reduce((a, b) =>
+          (a.similarity_score || 0) > (b.similarity_score || 0) ? a : b
+        );
+        const pctScore = Math.round((top.similarity_score || 0) * 100);
+        document.getElementById('res-grounding').textContent =
+          `Generated using ${similar.length} similar historical ticket${similar.length > 1 ? 's' : ''} (top match: ${top.ticket_id || '-'}, ${pctScore}% similarity)`;
+      } else {
+        document.getElementById('res-grounding').textContent = '';
+      }
+
   document.getElementById('res-text').innerHTML = formatResolution(res.resolution);
 
   const listEl = document.getElementById('similar-list');

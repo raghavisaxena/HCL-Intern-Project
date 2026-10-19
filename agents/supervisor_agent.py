@@ -1,3 +1,4 @@
+import time
 from loguru import logger
 
 from llm.groq_model import GroqModel
@@ -7,7 +8,12 @@ from agents.priority_agent import PriorityAgent
 from agents.assignment_agent import AssignmentRecommendationAgent
 from agents.resolution_agent import ResolutionAgent
 from agents.retrieval_agent import RetrievalAgent
+from agents.diagnostics_agent import run_diagnostics
 
+def log_step_banner(step_num, total_steps, agent_name, elapsed):
+    banner = f"STEP {step_num}/{total_steps}: {agent_name.upper()} ... DONE ({elapsed}s)"
+    line = "=" * len(banner)
+    logger.info(f"\n{line}\n{banner}\n{line}")
 
 class SupervisorAgent:
     """
@@ -107,9 +113,9 @@ class SupervisorAgent:
         logger.info("=" * 60)
 
     def process_ticket(
-        self,
-        subject: str,
-        description: str
+    self,
+    subject: str,
+    description: str
     ):
 
         logger.info("Processing new IT incident...")
@@ -120,12 +126,13 @@ class SupervisorAgent:
             )
 
         ticket_text = f"""
-Subject: {subject}
+    Subject: {subject}
 
-Description:
-{description}
-"""
+    Description:
+    {description}
+    """
 
+        agent_timings = {}
         # --------------------------------------------------
         # 1. RETRIEVAL
         # --------------------------------------------------
@@ -133,17 +140,28 @@ Description:
         logger.info(
             "Running Retrieval Agent..."
         )
+        _t0 = time.time()
 
         similar_tickets = (
             self.retrieval_agent.retrieve_for_resolution(
                 ticket_text
             )
         )
+        agent_timings["retrieval"] = round(time.time() - _t0, 2)
 
         logger.info(
             f"Retrieved {len(similar_tickets)} "
             f"similar historical tickets."
         )
+
+        log_step_banner(1, 5, "retrieval", agent_timings["retrieval"])
+        yield {
+            "type": "progress",
+            "agent": "retrieval",
+            "status": "done",
+            "time": agent_timings["retrieval"]
+        }
+        time.sleep(0.5)
 
         # --------------------------------------------------
         # 2. CLASSIFICATION
@@ -152,6 +170,7 @@ Description:
         logger.info(
             "Running Classification Agent..."
         )
+        _t0 = time.time()
 
         classification = (
             self.classification_agent.classify(
@@ -160,6 +179,16 @@ Description:
                 retrieved_tickets=similar_tickets
             )
         )
+        agent_timings["classification"] = round(time.time() - _t0, 2)
+
+        log_step_banner(2, 5, "classification", agent_timings["classification"])
+        yield {
+            "type": "progress",
+            "agent": "classification",
+            "status": "done",
+            "time": agent_timings["classification"]
+        }
+        time.sleep(0.5)
 
         # --------------------------------------------------
         # 3. PRIORITY
@@ -168,6 +197,7 @@ Description:
         logger.info(
             "Running Priority Agent..."
         )
+        _t0 = time.time()
 
         priority = (
             self.priority_agent.determine_priority(
@@ -176,6 +206,16 @@ Description:
                 retrieved_tickets=similar_tickets
             )
         )
+        agent_timings["priority"] = round(time.time() - _t0, 2)
+
+        log_step_banner(3, 5, "priority", agent_timings["priority"])
+        yield {
+            "type": "progress",
+            "agent": "priority",
+            "status": "done",
+            "time": agent_timings["priority"]
+        }
+        time.sleep(0.5)
 
         # --------------------------------------------------
         # 4. ASSIGNMENT
@@ -184,10 +224,21 @@ Description:
         logger.info(
             "Running Assignment Recommendation Agent..."
         )
+        _t0 = time.time()
 
         assignment = self.assignment_agent.recommend(
             similar_tickets
         )
+        agent_timings["assignment"] = round(time.time() - _t0, 2)
+
+        log_step_banner(4, 5, "assignment", agent_timings["assignment"])
+        yield {
+            "type": "progress",
+            "agent": "assignment",
+            "status": "done",
+            "time": agent_timings["assignment"]
+        }
+        time.sleep(0.5)
 
         # --------------------------------------------------
         # 5. RESOLUTION
@@ -196,6 +247,7 @@ Description:
         logger.info(
             "Running Resolution Agent..."
         )
+        _t0 = time.time()
 
         resolution = (
             self.resolution_agent.generate_resolution(
@@ -204,6 +256,18 @@ Description:
                 use_llm=self.llm is not None,
             )
         )
+        agent_timings["resolution"] = round(time.time() - _t0, 2)
+
+        log_step_banner(5, 5, "resolution", agent_timings["resolution"])
+        yield {
+            "type": "progress",
+            "agent": "resolution",
+            "status": "done",
+            "time": agent_timings["resolution"]
+        }
+        time.sleep(0.5)
+        # Real network diagnostics (returns [] for non-network tickets)
+        diagnostics = run_diagnostics(ticket_text)
 
         # --------------------------------------------------
         # FINAL RESULT
@@ -224,11 +288,16 @@ Description:
 
             "resolution": resolution,
 
-            "similar_tickets": similar_tickets
+            "similar_tickets": similar_tickets,
+            "agent_timings": agent_timings,
+            "diagnostics": diagnostics
         }
 
         logger.info(
             "IT incident processing completed successfully."
         )
 
-        return result
+        yield {
+            "type": "final",
+            "result": result
+        }
