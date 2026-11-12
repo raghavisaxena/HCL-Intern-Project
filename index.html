@@ -129,15 +129,7 @@
   }
 
   .section-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; color: #333; }
-  input[type="email"] {
-    width: 100%;
-    padding: 12px 14px;
-    margin-bottom: 16px;
-    border: 1px solid #d0d5dd;
-    border-radius: 8px;
-    font-size: 15px;
-    box-sizing: border-box;
-  }
+
 </style>
 </head>
 <body>
@@ -152,8 +144,6 @@
   <label for="description">Description</label>
   <textarea id="description" placeholder="Full description of the issue"></textarea>
   
-  <label for="email">Email (for updates)</label>
-  <input type="email" id="email" placeholder="you@example.com">
 
     <button id="submit-btn" onclick="analyzeTicket()">Analyze Ticket</button>
   <div id="loading">
@@ -257,7 +247,7 @@ function markStepDone(step, time) {
 async function analyzeTicket() {
   const subject = document.getElementById('subject').value.trim();
   const description = document.getElementById('description').value.trim();
-  const email = document.getElementById('email').value.trim();
+
   const errorBox = document.getElementById('error-box');
   const results = document.getElementById('results');
   const btn = document.getElementById('submit-btn');
@@ -289,7 +279,7 @@ async function analyzeTicket() {
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject, description, email })
+      body: JSON.stringify({ subject, description })
     });
 
     if (!response.ok) {
