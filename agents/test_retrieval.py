@@ -6,11 +6,11 @@ def main():
     agent = RetrievalAgent(top_k=5)
 
     ticket = """
-    Subject: Application crashes when I try to open it
+    Subject: Request for salary slip
 
     Description:
-    The application crashes immediately after I open it.
-    I restarted my computer but the problem still happens.
+    I need my salary slip for the previous month.
+    Please send it to me as soon as possible.
     """
 
     results = agent.retrieve_for_resolution(ticket)

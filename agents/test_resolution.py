@@ -1,4 +1,5 @@
 from agents.resolution_agent import ResolutionAgent
+from agents.retrieval_agent import RetrievalAgent
 
 
 def main():
@@ -9,7 +10,7 @@ def main():
 
     print("\nLoading Resolution Agent...")
 
-    agent = ResolutionAgent(top_k=2)
+    retrieval_agent = RetrievalAgent(top_k=2)
 
     ticket = """
 Subject: Application crashes when I try to open it
@@ -21,7 +22,14 @@ I restarted my computer but the problem still happens.
 
     print("\nGenerating resolution...\n")
 
-    result = agent.generate_resolution(ticket)
+    similar_tickets = retrieval_agent.retrieve_for_resolution(ticket)
+
+    agent = ResolutionAgent(top_k=2)
+
+    result = agent.generate_resolution(
+        ticket,
+        similar_tickets=similar_tickets
+    )
 
     print("=" * 70)
     print("GENERATED RESOLUTION")

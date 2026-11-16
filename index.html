@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IT Incident Ticket Assistant</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: #f4f6f8;
+    color: #1a1a1a;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 20px;
+  }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  p.subtitle { color: #666; margin-top: 0; margin-bottom: 24px; }
+
+  .card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  label { display: block; font-weight: 600; margin-bottom: 6px; margin-top: 14px; }
+  input[type="text"], textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  textarea { min-height: 100px; resize: vertical; }
+
+  button {
+    margin-top: 18px;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 6px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  button:hover { background: #1d4ed8; }
+  button:disabled { background: #93b4f0; cursor: not-allowed; }
+
+  .grid3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .field-label { font-size: 12px; text-transform: uppercase; color: #888; margin-bottom: 2px; }
+  .field-value { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .confidence { color: #2563eb; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+  .badge.high, .badge.critical { background: #fde2e2; color: #b91c1c; }
+  .badge.medium { background: #fef3c7; color: #92400e; }
+  .badge.low { background: #dcfce7; color: #166534; }
+
+  details {
+    margin-top: 6px;
+    font-size: 13px;
+    color: #555;
+  }
+  summary { cursor: pointer; color: #2563eb; }
+
+  .resolution-box {
+    white-space: pre-wrap;
+    background: #f8fafc;
+    border-left: 3px solid #2563eb;
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .similar-ticket {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+  }
+  .similar-ticket summary {
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+  .sim-score { color: #2563eb; font-weight: 600; }
+
+  #error-box {
+    background: #fde2e2;
+    color: #b91c1c;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  #loading { display: none; color: #666; margin-top: 14px; }
+  .step-row {
+    padding: 4px 0;
+    font-size: 14px;
+    color: #999;
+    transition: color 0.2s;
+  }
+  .step-row.done {
+    color: #1a1a1a;
+    font-weight: 600;
+  }
+  .step-icon {
+    display: inline-block;
+    width: 20px;
+  }
+  .step-time {
+    color: #2563eb;
+    font-weight: 400;
+    font-size: 13px;
+  }
+
+  .section-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; color: #333; }
+
+</style>
+</head>
+<body>
+
+<h1>IT Incident Ticket Assistant</h1>
+<p class="subtitle">AI-powered classification, priority, assignment &amp; resolution</p>
+
+<div class="card">
+  <label for="subject">Subject</label>
+  <input type="text" id="subject" placeholder="Short ticket title">
+
+  <label for="description">Description</label>
+  <textarea id="description" placeholder="Full description of the issue"></textarea>
+  
+
+    <button id="submit-btn" onclick="analyzeTicket()">Analyze Ticket</button>
+  <div id="loading">
+    <div>Analyzing... this may take a few seconds.</div>
+    <div id="step-tracker" style="margin-top:10px;">
+      <div class="step-row" data-step="retrieval"><span class="step-icon">⏳</span> Retrieval <span class="step-time"></span></div>
+      <div class="step-row" data-step="classification"><span class="step-icon">⏳</span> Classification <span class="step-time"></span></div>
+      <div class="step-row" data-step="priority"><span class="step-icon">⏳</span> Priority <span class="step-time"></span></div>
+      <div class="step-row" data-step="assignment"><span class="step-icon">⏳</span> Assignment <span class="step-time"></span></div>
+      <div class="step-row" data-step="resolution"><span class="step-icon">⏳</span> Resolution <span class="step-time"></span></div>
+    </div>
+  </div>
+</div>
+
+<div id="error-box"></div>
+
+<div id="results" style="display:none;">
+
+  <div class="card">
+    <div class="grid3">
+      <div>
+        <div class="field-label">Category</div>
+        <div class="field-value" id="cls-category">-</div>
+        <div class="field-label">Subcategory</div>
+        <div class="field-value" id="cls-subcategory">-</div>
+        <div class="field-label">Confidence</div>
+        <div class="field-value confidence" id="cls-confidence">-</div>
+        <details><summary>Why?</summary><span id="cls-reason"></span></details>
+      </div>
+      <div>
+        <div class="field-label">Priority</div>
+        <div class="field-value" id="pri-priority">-</div>
+        <div class="field-label">Confidence</div>
+        <div class="field-value confidence" id="pri-confidence">-</div>
+        <details><summary>Why?</summary><span id="pri-reason"></span></details>
+      </div>
+      <div>
+        <div class="field-label">Assigned Category</div>
+        <div class="field-value" id="asg-category">-</div>
+        <div class="field-label">Assigned Subcategory</div>
+        <div class="field-value" id="asg-subcategory">-</div>
+        <div class="field-label">Confidence</div>
+        <div class="field-value confidence" id="asg-confidence">-</div>
+        <details><summary>Why?</summary><span id="asg-reason"></span></details>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Pipeline Timing</div>
+    <div id="timing-list" style="font-size:13px;color:#333;"></div>
+  </div>
+  
+  <div class="card" id="diag-card" style="display:none;">
+    <div class="section-title">Network Diagnostics (real checks)</div>
+    <div id="diag-list" style="font-size:13px;color:#333;"></div>
+  </div>
+
+  <div class="card" id="recovery-card" style="display:none;">
+    <div class="section-title">Self-Healing Recovery</div>
+    <div id="recovery-body" style="font-size:13px;color:#333;"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Resolution <span id="res-mode" style="font-weight:400;color:#888;"></span></div>
+    <div id="res-grounding" style="font-size:13px;color:#555;margin-bottom:8px;"></div>
+    <div class="resolution-box" id="res-text">-</div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Similar Historical Tickets</div>
+    <div id="similar-list"></div>
+  </div>
+
+</div>
+
+<script>
+const API_URL = "http://127.0.0.1:8000/api/analyze-ticket";
+
+const STEP_ORDER = ['retrieval', 'classification', 'priority', 'assignment', 'resolution'];
+const STEP_LABELS = {
+  retrieval: 'Retrieval',
+  classification: 'Classification',
+  priority: 'Priority',
+  assignment: 'Assignment',
+  resolution: 'Resolution'
+};
+
+function initStepTracker() {
+  STEP_ORDER.forEach(step => {
+    const row = document.querySelector(`.step-row[data-step="${step}"]`);
+    if (!row) return;
+    row.classList.remove('done');
+    row.querySelector('.step-icon').textContent = '⏳';
+    row.querySelector('.step-time').textContent = '';
+  });
+}
+
+function markStepDone(step, time) {
+  const row = document.querySelector(`.step-row[data-step="${step}"]`);
+  if (!row) return;
+  row.classList.add('done');
+  row.querySelector('.step-icon').textContent = '✅';
+  row.querySelector('.step-time').textContent = `(${time}s)`;
+}
+async function analyzeTicket() {
+  const subject = document.getElementById('subject').value.trim();
+  const description = document.getElementById('description').value.trim();
+
+  const errorBox = document.getElementById('error-box');
+  const results = document.getElementById('results');
+  const btn = document.getElementById('submit-btn');
+  const loading = document.getElementById('loading');
+
+  errorBox.style.display = 'none';
+  results.style.display = 'none';
+
+  if (!subject || !description) {
+    errorBox.textContent = "Please fill in both subject and description.";
+    errorBox.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  loading.style.display = 'block';
+  initStepTracker();
+
+  const timingLabels = {
+    retrieval: 'Retrieval',
+    classification: 'Classification',
+    priority: 'Priority',
+    assignment: 'Assignment',
+    resolution: 'Resolution'
+  };
+  const completed = [];
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject, description })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || `Request failed with status ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResult = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+
+        if (!rawEvent.startsWith('data: ')) continue;
+        const jsonStr = rawEvent.slice(6);
+
+        let update;
+        try {
+          update = JSON.parse(jsonStr);
+        } catch (e) {
+          continue;
+        }
+
+        if (update.type === 'progress') {
+          markStepDone(update.agent, update.time);
+        } else if (update.type === 'final') {
+          finalResult = update.result;
+        } else if (update.type === 'error') {
+          throw new Error(update.detail || 'Ticket analysis failed');
+        }
+      }
+    }
+
+    if (!finalResult) {
+      throw new Error('Stream ended without a final result.');
+    }
+
+    renderResults(finalResult);
+
+  } catch (err) {
+    errorBox.textContent = "Error: " + err.message;
+    errorBox.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    loading.style.display = 'none';
+  }
+}
+
+function pct(value) {
+  if (value === undefined || value === null) return '-';
+  return Math.round(value * 100) + '%';
+}
+
+function priorityBadgeClass(priority) {
+  if (!priority) return '';
+  return priority.toLowerCase();
+}
+
+function formatResolution(text) {
+  if (!text) return '-';
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+function renderResults(data) {
+  const cls = data.classification || {};
+  const pri = data.priority || {};
+  const asg = data.assignment || {};
+  const res = data.resolution || {};
+  const similar = data.similar_tickets || [];
+
+  document.getElementById('cls-category').textContent = cls.category || '-';
+  document.getElementById('cls-subcategory').textContent = cls.subcategory || '-';
+  document.getElementById('cls-confidence').textContent = pct(cls.confidence);
+  document.getElementById('cls-reason').textContent = cls.reason || '-';
+
+  document.getElementById('pri-priority').innerHTML =
+    `<span class="badge ${priorityBadgeClass(pri.priority)}">${pri.priority || '-'}</span>`;
+  document.getElementById('pri-confidence').textContent = pct(pri.confidence);
+  document.getElementById('pri-reason').textContent = pri.reason || '-';
+
+  document.getElementById('asg-category').textContent = asg.recommended_category || '-';
+  document.getElementById('asg-subcategory').textContent = asg.recommended_subcategory || '-';
+  document.getElementById('asg-confidence').textContent = pct(asg.confidence);
+  document.getElementById('asg-reason').textContent = asg.reason || '-';
+
+  const timings = data.agent_timings || {};
+const timingLabels = {
+        retrieval: 'Retrieval',
+        classification: 'Classification',
+        priority: 'Priority',
+        assignment: 'Assignment',
+        resolution: 'Resolution'
+      };
+      const timingHtml = Object.keys(timingLabels)
+        .filter(key => timings[key] !== undefined)
+        .map(key => `${timingLabels[key]}: <strong>${timings[key]}s</strong>`)
+        .join(' &nbsp;→&nbsp; ');
+      document.getElementById('timing-list').innerHTML = timingHtml || 'No timing data available.';
+      const diagnostics = (data.diagnostics || []);
+const diagCard = document.getElementById('diag-card');
+if (diagnostics.length > 0) {
+  document.getElementById('diag-list').innerHTML = diagnostics
+    .map(line => `<div style="margin-bottom:4px;">${line.includes('OK') ? '✅' : '❌'} ${line}</div>`)
+    .join('');
+  diagCard.style.display = 'block';
+} else {
+  diagCard.style.display = 'none';
+}
+
+      // ---- Self-healing recovery (human approval required) ----
+      const recoveryCard = document.getElementById('recovery-card');
+      const recoveryBody = document.getElementById('recovery-body');
+      const recovery = data.recovery || {};
+      if (recovery.problem_detected) {
+        recoveryBody.innerHTML = `
+          <div style="margin-bottom:6px;">❌ <strong>Problem detected:</strong> ${recovery.health.service} is not responding</div>
+          <div style="margin-bottom:6px;color:#666;">${String(recovery.health.detail).replace(/</g, '&lt;')}</div>
+          <div style="margin-bottom:10px;">🛠️ <strong>Proposed action:</strong> ${recovery.description}</div>
+          <button id="approve-btn" style="padding:8px 16px;background:#16a34a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">Approve &amp; Run Recovery</button>
+          <div id="recovery-result" style="margin-top:10px;"></div>`;
+        recoveryCard.style.display = 'block';
+        document.getElementById('approve-btn').onclick = async () => {
+          const btn = document.getElementById('approve-btn');
+          const out = document.getElementById('recovery-result');
+          btn.disabled = true;
+          out.textContent = 'Running recovery and verifying...';
+          try {
+            const resp = await fetch('http://127.0.0.1:8000/api/recovery/approve', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action_id: recovery.proposed_action })
+            });
+            const r = await resp.json();
+            out.innerHTML = r.recovered
+              ? `✅ <strong>Recovered and verified</strong> (${String(r.detail).replace(/</g, '&lt;')})`
+              : `🚨 <strong>Recovery failed. Escalate to a human.</strong> (${String(r.detail).replace(/</g, '&lt;')})`;
+          } catch (e) {
+            out.textContent = 'Could not reach the backend: ' + e;
+            btn.disabled = false;
+          }
+        };
+      } else {
+        recoveryCard.style.display = 'none';
+      }
+  document.getElementById('res-mode').textContent = res.mode ? `(Mode: ${res.mode})` : '';
+
+if (similar.length > 0) {
+        const top = similar.reduce((a, b) =>
+          (a.similarity_score || 0) > (b.similarity_score || 0) ? a : b
+        );
+        const pctScore = Math.round((top.similarity_score || 0) * 100);
+        document.getElementById('res-grounding').textContent =
+          `Generated using ${similar.length} similar historical ticket${similar.length > 1 ? 's' : ''} (top match: ${top.ticket_id || '-'}, ${pctScore}% similarity)`;
+      } else {
+        document.getElementById('res-grounding').textContent = '';
+      }
+
+  document.getElementById('res-text').innerHTML = formatResolution(res.resolution);
+
+  const listEl = document.getElementById('similar-list');
+  listEl.innerHTML = '';
+
+  if (similar.length === 0) {
+    listEl.innerHTML = '<p style="color:#888;">No similar tickets found.</p>';
+  } else {
+    similar.forEach((t, i) => {
+      const div = document.createElement('details');
+      div.className = 'similar-ticket';
+      const score = t.similarity_score !== undefined ? t.similarity_score.toFixed(2) : '-';
+      div.innerHTML = `
+        <summary>Match ${i + 1} — similarity <span class="sim-score">${score}</span> — ${t.subject || ''}</summary>
+        <p><strong>Ticket ID:</strong> ${t.ticket_id || '-'}</p>
+        <p><strong>Description:</strong> ${t.description || '-'}</p>
+        <p><strong>Category / Subcategory:</strong> ${t.category || '-'} / ${t.subcategory || '-'}</p>
+        <p><strong>Priority:</strong> ${t.priority || '-'}</p>
+        <p><strong>Historical Resolution:</strong> ${t.resolution || '-'}</p>
+      `;
+      listEl.appendChild(div);
+    });
+  }
+
+  document.getElementById('results').style.display = 'block';
+}
+</script>
+
+</body>
+</html>

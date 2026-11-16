@@ -24,3 +24,9 @@ data/processed/
 
 # OS
 .DS_Store
+
+# Logs
+backend/logs/*.log
+
+# Generated vector store metadata
+vectorstore/*.parquet
