@@ -58,3 +58,19 @@ async def analyze_ticket(request: TicketRequest):
             yield f"data: {json.dumps(error_event)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+from agents.recovery_agent import run_recovery
+
+
+class ApprovalRequest(BaseModel):
+    action_id: str = Field(..., min_length=1, description="Recovery action approved by the user")
+
+
+@router.post("/recovery/approve", tags=["Recovery"])
+def approve_recovery(request: ApprovalRequest):
+    """
+    Runs a recovery action only after a human has approved it in the UI.
+    Unknown actions are refused by the allowlist in RecoveryAgent.
+    """
+    logger.info(f"Recovery approved: '{request.action_id}'")
+    return run_recovery(request.action_id)

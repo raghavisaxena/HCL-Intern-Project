@@ -9,6 +9,7 @@ from agents.assignment_agent import AssignmentRecommendationAgent
 from agents.resolution_agent import ResolutionAgent
 from agents.retrieval_agent import RetrievalAgent
 from agents.diagnostics_agent import run_diagnostics
+from agents.recovery_agent import propose_recovery
 
 def log_step_banner(step_num, total_steps, agent_name, elapsed):
     banner = f"STEP {step_num}/{total_steps}: {agent_name.upper()} ... DONE ({elapsed}s)"
@@ -268,6 +269,7 @@ class SupervisorAgent:
         time.sleep(0.5)
         # Real network diagnostics (returns [] for non-network tickets)
         diagnostics = run_diagnostics(ticket_text)
+        recovery = propose_recovery(ticket_text)
 
         # --------------------------------------------------
         # FINAL RESULT
@@ -290,7 +292,8 @@ class SupervisorAgent:
 
             "similar_tickets": similar_tickets,
             "agent_timings": agent_timings,
-            "diagnostics": diagnostics
+            "diagnostics": diagnostics,
+            "recovery": recovery
         }
 
         logger.info(
