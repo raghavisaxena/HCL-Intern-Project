@@ -202,6 +202,11 @@
     <div id="diag-list" style="font-size:13px;color:#333;"></div>
   </div>
 
+  <div class="card" id="recovery-card" style="display:none;">
+    <div class="section-title">Self-Healing Recovery</div>
+    <div id="recovery-body" style="font-size:13px;color:#333;"></div>
+  </div>
+
   <div class="card">
     <div class="section-title">Resolution <span id="res-mode" style="font-weight:400;color:#888;"></span></div>
     <div id="res-grounding" style="font-size:13px;color:#555;margin-bottom:8px;"></div>
@@ -402,6 +407,42 @@ if (diagnostics.length > 0) {
 } else {
   diagCard.style.display = 'none';
 }
+
+      // ---- Self-healing recovery (human approval required) ----
+      const recoveryCard = document.getElementById('recovery-card');
+      const recoveryBody = document.getElementById('recovery-body');
+      const recovery = data.recovery || {};
+      if (recovery.problem_detected) {
+        recoveryBody.innerHTML = `
+          <div style="margin-bottom:6px;">❌ <strong>Problem detected:</strong> ${recovery.health.service} is not responding</div>
+          <div style="margin-bottom:6px;color:#666;">${String(recovery.health.detail).replace(/</g, '&lt;')}</div>
+          <div style="margin-bottom:10px;">🛠️ <strong>Proposed action:</strong> ${recovery.description}</div>
+          <button id="approve-btn" style="padding:8px 16px;background:#16a34a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">Approve &amp; Run Recovery</button>
+          <div id="recovery-result" style="margin-top:10px;"></div>`;
+        recoveryCard.style.display = 'block';
+        document.getElementById('approve-btn').onclick = async () => {
+          const btn = document.getElementById('approve-btn');
+          const out = document.getElementById('recovery-result');
+          btn.disabled = true;
+          out.textContent = 'Running recovery and verifying...';
+          try {
+            const resp = await fetch('http://127.0.0.1:8000/api/recovery/approve', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action_id: recovery.proposed_action })
+            });
+            const r = await resp.json();
+            out.innerHTML = r.recovered
+              ? `✅ <strong>Recovered and verified</strong> (${String(r.detail).replace(/</g, '&lt;')})`
+              : `🚨 <strong>Recovery failed. Escalate to a human.</strong> (${String(r.detail).replace(/</g, '&lt;')})`;
+          } catch (e) {
+            out.textContent = 'Could not reach the backend: ' + e;
+            btn.disabled = false;
+          }
+        };
+      } else {
+        recoveryCard.style.display = 'none';
+      }
   document.getElementById('res-mode').textContent = res.mode ? `(Mode: ${res.mode})` : '';
 
 if (similar.length > 0) {
