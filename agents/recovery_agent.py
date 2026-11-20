@@ -37,7 +37,7 @@ def execute_action(action_id: str) -> dict:
     try:
         flags = 0
         if sys.platform == "win32":
-            flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+            flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
         subprocess.Popen(
             ALLOWED_ACTIONS[action_id],
             cwd=PROJECT_ROOT,
